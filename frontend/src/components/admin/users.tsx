@@ -1,7 +1,8 @@
-import React, { useState } from "react";
-import { mockUsers, User } from "./data/mockUsers";
-import { ArrowLeft, Pencil, Trash2, SearchIcon, Plus, Upload } from "lucide-react";
-
+import { useState } from "react";
+import { mockUsers } from "./data/UserData";
+import type { user } from "./data/UserData";
+import { ArrowLeft, Pencil, User , Trash2, SearchIcon, Plus, Upload } from "lucide-react";
+import { updateUser ,updateUserImg } from "../../services/admin.services";
 
 
 function Field({ label, value, editing, onChange, type = "text" }: {
@@ -28,46 +29,46 @@ function Field({ label, value, editing, onChange, type = "text" }: {
   );
 }
 
-function ImageUpload({ label, value, editing, onChange }: {
+async function ImageUpload({ label, value, editing, onChange, id }: {
   label: string;
   value?: string;
   editing: boolean;
   onChange: (v: string) => void;
-}) {
-  function handleFile(file: File) {
+  id: string;
+}) 
+  const [isUploading, setIsUploading] = useState(false); // ✅ here
+
+  async function handleFile(file: File, id: string) {
     const preview = URL.createObjectURL(file);
-    onChange(preview);
+
+    try {
+      setIsUploading(true);
+
+      const res = await updateUserImg(file, id);
+      console.log("Upload response:", res);
+
+      onChange(preview);
+    } catch (error) {
+      console.error("Upload error:", error);
+      alert("Failed to upload profile picture. Please try again.");
+    } finally {
+      setIsUploading(false);
+    }
   }
 
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-center text-slate-400">{label}</p>
-      <img
-        src={value || "https://via.placeholder.com/400"}
-        className="h-48 w-48 object-cover rounded-full border border-slate-700"
-      />
-      {editing && (
-        <label className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 cursor-pointer hover:bg-slate-800 text-sm">
-          <Upload className="w-4 h-4" /> Upload Image
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleFile(file);
-            }}
-          />
-        </label>
-      )}
-    </div>
-  );
-}
 
-function UserCard({ user, onView, onDelete }: { user: User; onView: () => void; onDelete: () => void }) {
+function UserCard({ user, onView, onDelete }: { user: user; onView: () => void; onDelete: () => void }) {
   return (
     <div className="group bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden hover:border-cyan-500/30 transition hover:-translate-y-1">
-      <img src={user.profileImage} className="h-40 w-full object-cover" alt={user.email} />
+      {
+        user.imageUrl!=='none' ? (
+          <img src={user.imageUrl} alt={user.name} className="h-48 w-full object-cover" />
+        ) : (
+          <div className="h-48 w-full bg-slate-700 flex items-center justify-center">
+            <User className="w-12 h-12 text-slate-500" />
+          </div>
+        )
+      }
       <div className="p-4 space-y-2">
         <p className="text-slate-100 font-semibold line-clamp-1">{user.name}</p>
         <p className="text-sm text-slate-400">{user.email}</p>
@@ -93,15 +94,14 @@ function UserCard({ user, onView, onDelete }: { user: User; onView: () => void; 
 }
 
 function UserDetails({ user, onBack, onSave, onDelete }: {
-  user: User;
+  user: user;
   onBack: () => void;
-  onSave: (u: User) => void;
+  onSave: (u: user) => void;
   onDelete: () => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState<User>(user);
-
-  function update<K extends keyof User>(key: K, value: User[K]) {
+  const [form, setForm] = useState<user>(user);
+  function update<K extends keyof user>(key: K, value: user[K]) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
@@ -116,17 +116,18 @@ function UserDetails({ user, onBack, onSave, onDelete }: {
         <div className="flex justify-center">
           <ImageUpload
             label="Profile Image"
-            value={form.profileImage}
+            value={form.imageUrl}
             editing={editing}
-            onChange={(v) => update("profileImage", v)}
+            onChange={(v) => update("imageUrl", v)}
+            id={form.id} 
           />
 
         </div>
         <div className="grid md:grid-cols-2 gap-4">
           <Field label="Email" value={form.email} editing={editing} onChange={(v) => update("email", v)} />
           <Field label="Phone" value={form.phone} editing={editing} onChange={(v) => update("phone", v)} />
-          <Field label="Age" type="number" value={form.age} editing={editing} onChange={(v) => update("age", Number(v))} />
-          <Field label="Signup Since" value={form.signupSince} editing={editing} onChange={(v) => update("signupSince", v)} />
+          <Field label="Age" type="date" value={form.age} editing={editing} onChange={(v) => update("age", v)} />
+          <Field label="Signup Since" type="date" value={form.signupSince} editing={editing} onChange={(v) => update("signupSince", v)} />
           <Field label="University" value={form.university} editing={editing} onChange={(v) => update("university", v)} />
           <Field label="Major" value={form.major} editing={editing} onChange={(v) => update("major", v)} />
           <Field label="Robotics Experience (years)" type="number" value={form.roboticsExperience} editing={editing} onChange={(v) => update("roboticsExperience", Number(v))} />
@@ -155,8 +156,8 @@ function UserDetails({ user, onBack, onSave, onDelete }: {
 }
 
 export default function UsersAdminPage() {
-  const [users, setUsers] = useState<User[]>(mockUsers);
-  const [selected, setSelected] = useState<User | null>(null);
+  const [users, setUsers] = useState<user[]>(mockUsers);
+  const [selected, setSelected] = useState<user | null>(null);
   const [search, setSearch] = useState("");
 
   function deleteUser(id: string) {
@@ -164,9 +165,12 @@ export default function UsersAdminPage() {
     setSelected(null);
   }
 
-  function saveUser(updated: User) {
-    setUsers((u) => u.map((x) => (x.id === updated.id ? updated : x)));
-    setSelected(updated);
+  function saveUser(updated: user) {
+    console.log("Saving user:", updated);
+    updateUser(updated.id, updated).then(() => {
+      setUsers((u) => u.map((x) => (x.id === updated.id ? updated : x)));
+      setSelected(updated);
+    });
   }
 
   if (selected) {
@@ -198,11 +202,11 @@ export default function UsersAdminPage() {
 
         <button
           onClick={() => {
-            const newUser: User = {
+            const newUser: user = {
               id: crypto.randomUUID(),
               email: "newuser@email.com",
               name: "New User",
-              profileImage: "",
+              imageUrl: "",
               age: 18,
               phone: "",
               signupSince: new Date().toISOString().split("T")[0],
@@ -221,8 +225,8 @@ export default function UsersAdminPage() {
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredUsers.map((user) => (
-          <UserCard key={user.id} user={user} onView={() => setSelected(user)} onDelete={() => deleteUser(user.id)} />
+        {filteredUsers.map((user , index) => (
+          <UserCard key={index} user={user} onView={() => setSelected(user)} onDelete={() => deleteUser(user.id)} />
         ))}
         {filteredUsers.length === 0 && (
           <p className="text-slate-400 col-span-full text-center">No users found.</p>
